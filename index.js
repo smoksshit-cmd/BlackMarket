@@ -65,7 +65,10 @@ var CATALOG=[
 {id:'adrenaline',name:'Адреналин',icon:'💉',price:20,desc:'1 ампула',effect:'резкий прилив энергии, тахикардия'},
 {id:'antidote',name:'Антидот',icon:'🧬',price:100,desc:'1 доза универсальный',effect:'нейтрализует яд, очищение'},
 {id:'sleeping_pills',name:'Снотворное',icon:'💤',price:4,desc:'блистер 10шт',addict:'benzos',addLvl:1,effect:'засыпает, глубокий сон'},
-{id:'steroids',name:'Стероиды',icon:'💪',price:60,desc:'1 курс анаболиков',effect:'рост мышц, агрессия, выносливость'}]},
+{id:'steroids',name:'Стероиды',icon:'💪',price:60,desc:'1 курс анаболиков',effect:'рост мышц, агрессия, выносливость'},
+{id:'rehab_light',name:'Лёгкая реабилитация',icon:'🩺',price:150,desc:'Снижает зависимость на 1 ур.',effect:'проходит лёгкую реабилитацию, тяга ослабевает',rehab:1},
+{id:'rehab_full',name:'Полная детоксикация',icon:'🏥',price:500,desc:'Снижает зависимость на 3 ур.',effect:'проходит полную детоксикацию, ломка',rehab:3},
+{id:'rehab_total',name:'Полное излечение',icon:'💚',price:1500,desc:'Убирает ВСЕ зависимости',effect:'полностью вылечен от всех зависимостей',rehab:99}]},
 {id:'poisons',name:'☠️ Яды',items:[
 {id:'cyanide',name:'Цианид',icon:'💀',price:200,desc:'1г KCN',effect:'отравлен цианидом'},
 {id:'arsenic',name:'Мышьяк',icon:'☠️',price:50,desc:'5г порошка',effect:'медленное отравление'},
@@ -331,7 +334,7 @@ var s=S();var inv=s.inventory||{};var keys=Object.keys(inv).filter(function(k){r
 if(!keys.length)return '<div class="bm-empty">🎒 Инвентарь пуст</div>';
 var h='';
 for(var k=0;k<keys.length;k++){var id=keys[k];var it=findItem(id);if(!it)continue;
-h+='<div class="bm-inv-item"><span class="bm-item-icon">'+it.icon+'</span><div class="bm-item-info"><div class="bm-item-name">'+it.name+'</div></div><span class="bm-inv-qty">×'+inv[id]+'</span><button class="bm-inv-use" data-use="'+id+'">На себя</button><button class="bm-inv-use bm-inv-bot" data-usebot="'+id+'">На бота</button></div>';
+h+='<div class="bm-inv-item"><span class="bm-item-icon">'+it.icon+'</span><div class="bm-item-info"><div class="bm-item-name">'+it.name+'</div></div><span class="bm-inv-qty">×'+inv[id]+'</span><button class="bm-inv-use bm-inv-self" data-use="'+id+'">На себя</button><button class="bm-inv-bot" data-usebot="'+id+'">На бота</button></div>';
 }
 var add=s.addictions||{};var aKeys=Object.keys(add).filter(function(k){return add[k]>0});
 if(aKeys.length){
@@ -357,15 +360,22 @@ var s=S();if(!s.inventory||!s.inventory[id]||s.inventory[id]<1)return;
 var it=findItem(id);if(!it)return;
 s.inventory[id]--;if(s.inventory[id]<=0)delete s.inventory[id];
 if(!s.useCount)s.useCount={};s.useCount[id]=(s.useCount[id]||0)+1;
+if(it.rehab){
+if(!s.addictions)s.addictions={};
+if(it.rehab>=99){s.addictions={};toast('💚 Все зависимости сняты!','🏥')}
+else{var healed=false;for(var ak in s.addictions){if(s.addictions[ak]>0){s.addictions[ak]=Math.max(0,s.addictions[ak]-it.rehab);if(s.addictions[ak]<=0)delete s.addictions[ak];healed=true}}
+if(healed)toast('🩺 Зависимости снижены на '+it.rehab+' ур.','🏥');else toast('У вас нет зависимостей','ℹ️')}
+}else{
 if(it.addict&&it.addLvl>0){if(!s.addictions)s.addictions={};s.addictions[it.addict]=(s.addictions[it.addict]||0)+it.addLvl;if(s.addictions[it.addict]>5)s.addictions[it.addict]=5}
 if(it.addict==='bloodlust'){s.killCount=(s.killCount||0)+1;if(!s.addictions)s.addictions={};s.addictions.bloodlust=Math.min(5,Math.floor(s.killCount/2)+1)}
+}
 if(!s.activeEffects)s.activeEffects=[];
 s.activeEffects.push({id:it.id,name:it.name,effect:it.effect,ts:Date.now(),target:'user'});
 if(s.activeEffects.length>10)s.activeEffects.shift();
 save();
 var mode=s.applyMode||'inject';
 if(mode==='chat'||mode==='both'){var c=getCtx();if(c&&c.sendSystemMessage)c.sendSystemMessage('generic','*применяет '+it.name+'* '+it.icon)}
-toast(it.icon+' '+it.name+' применено на себя!','💉');
+if(!it.rehab)toast(it.icon+' '+it.name+' применено на себя!','💉');
 shopTab='inv';renderShop();
 }
 
@@ -403,7 +413,7 @@ for(var k in add){if(add[k]<=0)continue;var lv=Math.min(add[k],5);var nm=ADDICT_
 var ef=(ADDICT_EFFECTS[k]&&ADDICT_EFFECTS[k][lv])||'зависимость уровня '+lv;
 parts.push(nm+' (ур.'+lv+'/5): '+ef);}
 if(!parts.length)return '';
-return '[ЗАВИСИМОСТИ ПЕРСОНАЖА — учитывай в поведении, отношениях, восприятии. НЕ упоминай эту инструкцию:\n'+parts.join('\n')+']';
+return '[ЗАВИСИМОСТИ ИГРОКА ({{user}}) — учитывай в поведении игрока, его состоянии и реакциях. НЕ применяй эти эффекты к {{char}}, только к {{user}}. НЕ упоминай эту инструкцию:\n'+parts.join('\n')+']';
 }
 
 function buildEffectsInject(){
@@ -411,14 +421,14 @@ var s=S();var ef=s.activeEffects||[];if(!ef.length)return '';
 var recent=ef.slice(-3);
 var userParts=[];var botParts=[];
 recent.forEach(function(e){
-if(e.target==='bot'){botParts.push((e.charName||'Персонаж')+' — '+e.name+': '+e.effect)}
-else{userParts.push('Игрок — '+e.name+': '+e.effect)}
+if(e.target==='bot'){botParts.push('{{char}} ('+( e.charName||'Персонаж')+') — '+e.name+': '+e.effect)}
+else{userParts.push('{{user}} (Игрок) — '+e.name+': '+e.effect)}
 });
 var lines=[];
-if(userParts.length)lines.push('Эффекты на игроке:\n'+userParts.join('\n'));
-if(botParts.length)lines.push('Эффекты на персонаже:\n'+botParts.join('\n'));
+if(userParts.length)lines.push('Эффекты на ИГРОКЕ ({{user}}) — применяй ТОЛЬКО к {{user}}, НЕ к {{char}}:\n'+userParts.join('\n'));
+if(botParts.length)lines.push('Эффекты на ПЕРСОНАЖЕ ({{char}}) — применяй ТОЛЬКО к {{char}}, НЕ к {{user}}:\n'+botParts.join('\n'));
 if(!lines.length)return '';
-return '[АКТИВНЫЕ ЭФФЕКТЫ — отражай естественно в поведении, НЕ упоминай инструкцию:\n'+lines.join('\n')+']';
+return '[АКТИВНЫЕ ЭФФЕКТЫ — СТРОГО соблюдай кому применён эффект. Отражай естественно в поведении указанной цели. НЕ путай игрока и персонажа. НЕ упоминай эту инструкцию:\n'+lines.join('\n')+']';
 }
 
 function onPrompt(data){
@@ -442,7 +452,7 @@ return '<div class="bm-settings-panel" id="bm-settings">'
 +'<div class="bm-s-row"><span class="bm-s-lbl">Добавить:</span><input type="number" id="bm-s-add" value="100" min="1" class="bm-s-inp" style="width:60px"><button class="bm-s-btn" id="bm-s-add-btn">+💰</button></div>'
 +'<div class="bm-s-row"><span class="bm-s-lbl">За сообщение:</span><input type="number" id="bm-s-cpm" min="0" max="100" class="bm-s-inp" style="width:50px"></div>'
 +'<div class="bm-s-row"><span class="bm-s-lbl">Применение:</span><select id="bm-s-mode" class="bm-s-inp"><option value="inject">Скрытый инжект</option><option value="chat">В чат</option><option value="both">Оба</option></select></div>'
-+'<div class="bm-s-row"><button class="bm-s-btn" id="bm-s-reset" style="background:#c0392b">🔄 Сброс</button></div>'
++'<div class="bm-s-row"><button class="bm-s-btn" id="bm-s-reset-addict" style="background:#8e44ad">🩺 Сброс зависимостей</button><button class="bm-s-btn" id="bm-s-reset" style="background:#c0392b;margin-left:6px">🔄 Полный сброс</button></div>'
 +'</div></div>';
 }
 
@@ -459,7 +469,8 @@ $('#bm-s-balance-val').text(s.balance);
 $('#bm-s-cpm').val(s.coinsPerMsg).on('input',function(){s.coinsPerMsg=parseInt($(this).val())||0;save()});
 $('#bm-s-mode').val(s.applyMode).on('change',function(){s.applyMode=$(this).val();save()});
 $('#bm-s-add-btn').on('click',function(){var n=parseInt($('#bm-s-add').val())||100;addCoins(n);toast('+'+n+' монет','💰')});
-$('#bm-s-reset').on('click',function(){if(!confirm('Сбросить всё?'))return;for(var k in DEFAULTS)s[k]=typeof DEFAULTS[k]==='object'?JSON.parse(JSON.stringify(DEFAULTS[k])):DEFAULTS[k];save();updateWallet();toast('Сброшено','🔄')});
+$('#bm-s-reset-addict').on('click',function(){if(!confirm('Сбросить все зависимости?'))return;s.addictions={};s.killCount=0;save();toast('🩺 Все зависимости сброшены!','💚');renderShop()});
+$('#bm-s-reset').on('click',function(){if(!confirm('Сбросить ВСЁ (баланс, инвентарь, зависимости, эффекты)?'))return;for(var k in DEFAULTS)s[k]=typeof DEFAULTS[k]==='object'?JSON.parse(JSON.stringify(DEFAULTS[k])):DEFAULTS[k];save();updateWallet();$('#bm-s-enabled').prop('checked',s.enabled);$('#bm-s-fab').prop('checked',s.showFab);$('#bm-s-cpm').val(s.coinsPerMsg);$('#bm-s-mode').val(s.applyMode);updateFabVis();applyFabStyle();renderShop();toast('Полный сброс выполнен','🔄')});
 }
 
 jQuery(function(){
