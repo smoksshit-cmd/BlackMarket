@@ -270,6 +270,7 @@
 .bm-l3 { background: #e94560; } .bm-l4 { background: #9b59b6; }
 .bm-l5 { background: #c0392b; }
 .bm-addict-lvl { font-size: 10px; color: #666; }
+.bm-addict-desc { font-size: 11px; color: #aaa; margin: -4px 0 6px 8px; font-style: italic; }
 
 /* Empty */
 .bm-empty { text-align: center; padding: 24px; color: #555; font-size: 13px; }
@@ -327,19 +328,87 @@
 .bm-sw input:checked + .bm-sw-sl { background: #e94560; }
 .bm-sw input:checked + .bm-sw-sl::before { transform: translateX(14px); }
 
-/* Mobile touch */
+/* ─── Mobile touch (все тачскрины) ───────────────────────────── */
 @media (pointer: coarse) {
-  .bm-cat-card { min-height: 48px; }
-  .bm-item-buy { min-height: 36px; padding: 8px 14px; }
-  .bm-inv-use { min-height: 34px; padding: 7px 12px; }
-  .bm-tab { padding: 12px 8px; }
+  .bm-cat-card  { min-height: 52px; }
+  .bm-item-buy  { min-height: 40px; padding: 10px 16px; }
+  .bm-inv-use,
+  .bm-inv-bot   { min-height: 38px; padding: 9px 14px; }
+  .bm-tab       { padding: 13px 8px; font-size: 14px; }
+  .bm-s-btn     { min-height: 36px; padding: 8px 14px; }
 }
+
+/* ─── iPhone / маленький экран до 480px ──────────────────────── */
 @media (max-width: 480px) {
-  #bm_drawer { max-height: 92vh; }
-  .bm-item-desc { white-space: normal; }
-  #bm_fab_btn { width: 44px; height: 44px; font-size: 18px; }
-  #bm_fab_count { min-width: 16px; height: 16px; font-size: 9px; top: -2px; right: -2px; }
+  /* Drawer — на весь экран, учитываем Dynamic Island / notch */
+  #bm_drawer {
+    width: 100vw !important;
+    border-radius: 0 0 18px 18px;
+    max-height: calc(92dvh - env(safe-area-inset-top, 0px));
+    margin-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Нижний отступ внутри drawer — Home Indicator */
+  .bm-shop-body {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 16px));
+  }
+
+  /* FAB */
+  #bm_fab_btn {
+    width: 46px;
+    height: 46px;
+    font-size: 20px;
+  }
+  #bm_fab_count {
+    min-width: 18px;
+    height: 18px;
+    font-size: 10px;
+    top: -3px;
+    right: -3px;
+  }
+
+  /* Карточки */
+  .bm-item-name  { font-size: 14px; }
+  .bm-item-desc  { white-space: normal; font-size: 12px; }
+  .bm-item-price { font-size: 13px; }
+  .bm-item-buy   { font-size: 13px; min-height: 42px; }
+
+  .bm-cat-name   { font-size: 15px; }
+  .bm-cat-desc   { font-size: 12px; }
+  .bm-cat-card   { padding: 14px 12px; }
+
+  .bm-inv-use,
+  .bm-inv-bot    { font-size: 12px; min-height: 38px; }
+
+  /* Header */
+  .bm-shop-title { font-size: 16px; }
+  .bm-wallet     { font-size: 13px; }
+
+  /* Toast — над Home Indicator */
+  .bm-toast {
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    top: auto;
+    transform: translateX(-50%) translateY(80px);
+  }
+  .bm-toast-show {
+    transform: translateX(-50%) translateY(0);
+  }
 }
+
+/* ─── Safe area — Home Indicator (все айфоны без кнопки) ─────── */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
-  #bm_drawer { padding-bottom: env(safe-area-inset-bottom); }
+  #bm_drawer {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ─── iPhone SE / мини до 375px ──────────────────────────────── */
+@media (max-width: 375px) {
+  #bm_drawer {
+    max-height: calc(96dvh - env(safe-area-inset-top, 0px));
+  }
+  .bm-item-card  { padding: 8px; gap: 6px; }
+  .bm-item-buy   { padding: 8px 10px; font-size: 12px; }
+  .bm-tab        { font-size: 13px; padding: 11px 4px; }
+  #bm_fab_btn    { width: 42px; height: 42px; font-size: 18px; }
 }
