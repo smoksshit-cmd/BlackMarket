@@ -13,7 +13,7 @@ var chatId=(typeof c.getCurrentChatId==='function'?c.getCurrentChatId():null)||c
 var charId=c.characterId!=null?c.characterId:(c.groupId!=null?('g'+c.groupId):'unknown');
 return 'bm_v1__'+charId+'__'+chatId;
 }
-var CHAT_DEFAULTS={inventory:{},addictions:{},activeEffects:[],killCount:0,useCount:{},lastUseTime:{},rehabVisits:{}};
+var CHAT_DEFAULTS={inventory:{},addictions:{},botAddictions:{},activeEffects:[],killCount:0,useCount:{},lastUseTime:{},botLastUseTime:{},rehabVisits:{}};
 function SC(){
 var c=getCtx();if(!c||!c.chatMetadata)return JSON.parse(JSON.stringify(CHAT_DEFAULTS));
 var key=chatKey();
@@ -342,7 +342,7 @@ function saveGlobalAddictions(){saveChat();}
 function loadGlobalAddictions(){}
 function resetAddictionsForNewChat(){
 var d=SC();
-d.addictions={};d.lastUseTime={};d.rehabVisits={};d.activeEffects=[];d.killCount=0;
+d.addictions={};d.botAddictions={};d.lastUseTime={};d.botLastUseTime={};d.rehabVisits={};d.activeEffects=[];d.killCount=0;
 saveChat();
 }
 
@@ -534,60 +534,138 @@ h+='<div class="bm-item-card"><span class="bm-item-icon">'+it.icon+'</span><div 
 return h;
 }
 
-function renderInv(){
-var gs=S();var s=SC();var inv=s.inventory||{};var keys=Object.keys(inv).filter(function(k){return inv[k]>0});
-if(!keys.length)return '<div class="bm-empty">🎒 Инвентарь пуст</div>';
-var h='';
-for(var k=0;k<keys.length;k++){var id=keys[k];var it=findItem(id);if(!it)continue;
-h+='<div class="bm-inv-item"><span class="bm-item-icon">'+it.icon+'</span><div class="bm-item-info"><div class="bm-item-name">'+it.name+'</div></div><span class="bm-inv-qty">×'+inv[id]+'</span><button class="bm-inv-use bm-inv-self" data-use="'+id+'">На себя</button><button class="bm-inv-bot" data-usebot="'+id+'">На бота</button></div>';
+function removeEffect(idx){
+var s=SC();if(!s.activeEffects)return;
+s.activeEffects.splice(idx,1);
+saveChat();renderShop();
 }
-var add=s.addictions||{};var aKeys=Object.keys(add).filter(function(k){return add[k]>0});
-if(aKeys.length){
-h+='<div class="bm-addict-section"><div class="bm-addict-title">⚠️ Зависимости</div>';
-for(var a=0;a<aKeys.length;a++){var ak=aKeys[a];var lv=Math.min(add[ak],MAX_ADDICT);var pct=Math.round(lv/MAX_ADDICT*100);
-var cls=lv<=4?'bm-l1':lv<=8?'bm-l2':lv<=12?'bm-l3':lv<=16?'bm-l4':'bm-l5';
-var nm=ADDICT_NAMES[ak]||ak;
-var efDesc=getAddictEffect(ak,lv);
-h+='<div class="bm-addict-row"><span class="bm-addict-name">'+nm+'</span><div class="bm-addict-bar"><div class="bm-addict-fill '+cls+'" style="width:'+pct+'%"></div></div><span class="bm-addict-lvl">'+lv+'/'+MAX_ADDICT+'</span></div>';
-h+='<div class="bm-addict-desc" style="font-size:11px;color:#aaa;margin:-4px 0 6px 8px;font-style:italic">'+efDesc+'</div>';
-}h+='</div>';}
+
+function renderEffectBadges(effects,target,label,color){
+if(!effects.length)return '';
+var h='<div style="margin:8px 0 4px 0;padding:6px 8px;background:rgba(0,0,0,0.25);border-radius:8px;border-left:3px solid '+color+'">';
+h+='<div style="font-size:11px;font-weight:bold;color:'+color+';margin-bottom:5px;">'+label+'</div>';
+effects.forEach(function(e){
+var icon=findItem(e.id)?findItem(e.id).icon:'✨';
+h+='<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;background:rgba(255,255,255,0.05);border-radius:6px;padding:5px 6px;">';
+h+='<span style="font-size:16px;flex-shrink:0">'+icon+'</span>';
+h+='<div style="flex:1;min-width:0">';
+h+='<div style="font-size:12px;font-weight:bold;color:#eee">'+e.name+'</div>';
+h+='<div style="font-size:10px;color:#aaa;margin-top:1px;word-break:break-word">'+e.effect+'</div>';
+h+='</div>';
+h+='<button class="bm-eff-remove" data-effidx="'+e._idx+'" title="Снять эффект" style="background:#c0392b;border:none;color:#fff;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;flex-shrink:0">✕</button>';
+h+='</div>';
+});
+h+='</div>';
 return h;
 }
 
-function renderAddictTab(){
-var s=SC();var add=s.addictions||{};var aKeys=Object.keys(add).filter(function(k){return add[k]>0});
-var h='<div class="bm-addict-section" style="padding:8px">';
-h+='<div class="bm-addict-title" style="font-size:16px;margin-bottom:10px">⚠️ Зависимости и здоровье</div>';
-if(!aKeys.length){h+='<div class="bm-empty" style="text-align:center;padding:20px;color:#8f8">✅ Вы чисты! Нет зависимостей.</div>';}
-else{
-for(var a=0;a<aKeys.length;a++){
-var ak=aKeys[a];var lv=Math.min(add[ak],MAX_ADDICT);var pct=Math.round(lv/MAX_ADDICT*100);
-var cls=lv<=4?'bm-l1':lv<=8?'bm-l2':lv<=12?'bm-l3':lv<=16?'bm-l4':'bm-l5';
-var nm=ADDICT_NAMES[ak]||ak;
-var efDesc=getAddictEffect(ak,lv);
-var wdActive=lv>=3&&isInWithdrawal(ak);
-var wdText=wdActive?getWithdrawalText(ak,lv):'';
-var lastUse=s.lastUseTime&&s.lastUseTime[ak]?s.lastUseTime[ak]:0;
-var timeSince=lastUse?Math.round((Date.now()-lastUse)/60000):0;
-var timeStr=lastUse?(timeSince<1?'только что':timeSince<60?timeSince+' мин. назад':Math.round(timeSince/60)+' ч. назад'):'никогда';
-h+='<div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:8px 10px;margin-bottom:8px;border-left:3px solid '+(wdActive?'#e74c3c':'#f39c12')+'">';
-h+='<div class="bm-addict-row"><span class="bm-addict-name" style="font-weight:bold">'+nm+'</span><div class="bm-addict-bar"><div class="bm-addict-fill '+cls+'" style="width:'+pct+'%"></div></div><span class="bm-addict-lvl">'+lv+'/'+MAX_ADDICT+'</span></div>';
-h+='<div style="font-size:11px;color:#ccc;margin:2px 0 2px 4px">📊 Состояние: <em>'+efDesc+'</em></div>';
-h+='<div style="font-size:11px;color:#aaa;margin:1px 0 1px 4px">🕐 Последнее употребление: '+timeStr+'</div>';
-if(wdActive&&wdText)h+='<div style="font-size:12px;color:#e74c3c;margin:3px 0 1px 4px;font-weight:bold">🤮 ЛОМКА: '+wdText+'</div>';
+function renderInv(){
+var gs=S();var s=SC();var inv=s.inventory||{};var keys=Object.keys(inv).filter(function(k){return inv[k]>0});
+var ef=s.activeEffects||[];
+var userEffects=[];var botEffects=[];
+ef.forEach(function(e,i){e._idx=i;if(e.target==='bot')botEffects.push(e);else userEffects.push(e);});
+
+var h='';
+
+// --- Активные эффекты ---
+if(userEffects.length||botEffects.length){
+h+='<div style="margin-bottom:10px">';
+h+='<div style="font-size:12px;font-weight:bold;color:#f39c12;margin-bottom:4px;">⚡ Активные эффекты</div>';
+h+=renderEffectBadges(userEffects,'user','👤 На игроке ({{user}})','#3498db');
+h+=renderEffectBadges(botEffects,'bot','🤖 На персонаже ({{char}})','#9b59b6');
 h+='</div>';
 }
+
+// --- Инвентарь ---
+if(!keys.length){
+h+='<div class="bm-empty">🎒 Инвентарь пуст</div>';
+}else{
+for(var k=0;k<keys.length;k++){var id=keys[k];var it=findItem(id);if(!it)continue;
+h+='<div class="bm-inv-item"><span class="bm-item-icon">'+it.icon+'</span><div class="bm-item-info"><div class="bm-item-name">'+it.name+'</div></div><span class="bm-inv-qty">×'+inv[id]+'</span><button class="bm-inv-use bm-inv-self" data-use="'+id+'">На себя</button><button class="bm-inv-bot" data-usebot="'+id+'">На бота</button></div>';
+}
+}
+
+// --- Зависимости ---
+var ctx2=getCtx();
+var userName=(ctx2&&ctx2.name1)||'Игрок';
+var charName2=(ctx2&&ctx2.name2)||'Персонаж';
+function renderAddictBlock(addObj,label,color){
+var keys=Object.keys(addObj).filter(function(k){return addObj[k]>0});
+if(!keys.length)return '';
+var bh='<div style="margin:6px 0 4px 0;padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:8px;border-left:3px solid '+color+'">';
+bh+='<div style="font-size:11px;font-weight:bold;color:'+color+';margin-bottom:4px;">'+label+'</div>';
+for(var ai=0;ai<keys.length;ai++){
+var ak=keys[ai];var lv=Math.min(addObj[ak],MAX_ADDICT);var pct=Math.round(lv/MAX_ADDICT*100);
+var cls=lv<=4?'bm-l1':lv<=8?'bm-l2':lv<=12?'bm-l3':lv<=16?'bm-l4':'bm-l5';
+var nm=ADDICT_NAMES[ak]||ak;var efDesc=getAddictEffect(ak,lv);
+bh+='<div class="bm-addict-row"><span class="bm-addict-name">'+nm+'</span><div class="bm-addict-bar"><div class="bm-addict-fill '+cls+'" style="width:'+pct+'%"></div></div><span class="bm-addict-lvl">'+lv+'/'+MAX_ADDICT+'</span></div>';
+bh+='<div class="bm-addict-desc" style="font-size:10px;color:#aaa;margin:-2px 0 4px 8px;font-style:italic">'+efDesc+'</div>';
+}
+bh+='</div>';
+return bh;
+}
+var addUser=s.addictions||{};var addBot=s.botAddictions||{};
+var hasAddict=Object.keys(addUser).some(function(k){return addUser[k]>0})||Object.keys(addBot).some(function(k){return addBot[k]>0});
+if(hasAddict){
+h+='<div class="bm-addict-section"><div class="bm-addict-title">⚠️ Зависимости</div>';
+h+=renderAddictBlock(addUser,'👤 '+userName,'#3498db');
+h+=renderAddictBlock(addBot,'🤖 '+charName2,'#9b59b6');
+h+='</div>';
+}
+return h;
+}
+
+function renderAddictDetailBlock(addObj,lastUseObj,label,color,isUser){
+var keys=Object.keys(addObj).filter(function(k){return addObj[k]>0});
+if(!keys.length)return '';
+var bh='<div style="margin-bottom:8px">';
+bh+='<div style="font-size:12px;font-weight:bold;color:'+color+';margin-bottom:4px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06)">'+label+'</div>';
+for(var ai=0;ai<keys.length;ai++){
+var ak=keys[ai];var lv=Math.min(addObj[ak],MAX_ADDICT);var pct=Math.round(lv/MAX_ADDICT*100);
+var cls=lv<=4?'bm-l1':lv<=8?'bm-l2':lv<=12?'bm-l3':lv<=16?'bm-l4':'bm-l5';
+var nm=ADDICT_NAMES[ak]||ak;var efDesc=getAddictEffect(ak,lv);
+var lastUse=(lastUseObj&&lastUseObj[ak])||0;
+var timeSince=lastUse?Math.round((Date.now()-lastUse)/60000):0;
+var timeStr=lastUse?(timeSince<1?'только что':timeSince<60?timeSince+' мин. назад':Math.round(timeSince/60)+' ч. назад'):'никогда';
+var wdActive=isUser?(lv>=3&&isInWithdrawal(ak)):(lv>=3&&(Date.now()-(lastUse||0))/60000>10);
+var wdText=wdActive?getWithdrawalText(ak,lv):'';
+bh+='<div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:8px 10px;margin-bottom:6px;border-left:3px solid '+(wdActive?'#e74c3c':color)+'">';
+bh+='<div class="bm-addict-row"><span class="bm-addict-name" style="font-weight:bold">'+nm+'</span><div class="bm-addict-bar"><div class="bm-addict-fill '+cls+'" style="width:'+pct+'%"></div></div><span class="bm-addict-lvl">'+lv+'/'+MAX_ADDICT+'</span></div>';
+bh+='<div style="font-size:11px;color:#ccc;margin:2px 0 2px 4px">📊 <em>'+efDesc+'</em></div>';
+bh+='<div style="font-size:11px;color:#aaa;margin:1px 0 1px 4px">🕐 '+timeStr+'</div>';
+if(wdActive&&wdText)bh+='<div style="font-size:12px;color:#e74c3c;margin:3px 0 1px 4px;font-weight:bold">🤮 ЛОМКА: '+wdText+'</div>';
+bh+='</div>';
+}
+bh+='</div>';
+return bh;
+}
+
+function renderAddictTab(){
+var gs=S();var s=SC();
+var ctx3=getCtx();
+var userName=(ctx3&&ctx3.name1)||'Игрок';
+var charName3=(ctx3&&ctx3.name2)||'Персонаж';
+var addUser=s.addictions||{};var addBot=s.botAddictions||{};
+var hasUser=Object.keys(addUser).some(function(k){return addUser[k]>0});
+var hasBot=Object.keys(addBot).some(function(k){return addBot[k]>0});
+var h='<div class="bm-addict-section" style="padding:8px">';
+h+='<div class="bm-addict-title" style="font-size:16px;margin-bottom:10px">⚠️ Зависимости и здоровье</div>';
+if(!hasUser&&!hasBot){
+h+='<div class="bm-empty" style="text-align:center;padding:20px;color:#8f8">✅ Все чисты! Нет зависимостей.</div>';
+}else{
+h+=renderAddictDetailBlock(addUser,s.lastUseTime,'👤 '+userName,'#3498db',true);
+h+=renderAddictDetailBlock(addBot,s.botLastUseTime,'🤖 '+charName3,'#9b59b6',false);
 }
 h+='<div style="margin-top:12px;border-top:1px solid #444;padding-top:10px">';
 h+='<div style="font-size:14px;margin-bottom:8px">🏥 Реабилитационный центр</div>';
 h+='<div style="font-size:11px;color:#aaa;margin-bottom:8px">Лечение зависимостей — платно. Несколько визитов для полного излечения.</div>';
 var rehabItems=[
-{id:'rehab_light',name:'Лёгкая реабилитация',price:150,desc:'Снижает все зависимости на 1 ур.',icon:'🩺'},
-{id:'rehab_full',name:'Полная детоксикация',price:500,desc:'Снижает все зависимости на 3 ур.',icon:'🏥'},
-{id:'rehab_total',name:'Полное излечение',price:1500,desc:'Убирает ВСЕ зависимости',icon:'💚'}
+{id:'rehab_light',name:'Лёгкая реабилитация',price:150,desc:'Снижает зависимости игрока на 1 ур.',icon:'🩺'},
+{id:'rehab_full',name:'Полная детоксикация',price:500,desc:'Снижает зависимости игрока на 3 ур.',icon:'🏥'},
+{id:'rehab_total',name:'Полное излечение',price:1500,desc:'Убирает ВСЕ зависимости игрока',icon:'💚'}
 ];
 for(var r=0;r<rehabItems.length;r++){
-var ri=rehabItems[r];var canBuy=s.balance>=ri.price;
+var ri=rehabItems[r];var canBuy=gs.balance>=ri.price;
 h+='<div class="bm-item-card" style="margin-bottom:4px"><span class="bm-item-icon">'+ri.icon+'</span><div class="bm-item-info"><div class="bm-item-name">'+ri.name+'</div><div class="bm-item-desc">'+ri.desc+'</div></div><span class="bm-item-price">'+ri.price+'💰</span><button class="bm-item-buy" data-buy="'+ri.id+'"'+(canBuy?'':' disabled')+'>Купить</button></div>';
 }
 h+='</div></div>';
@@ -663,6 +741,14 @@ if(it.gender&&it.gender!=='any'){
         botMismatchNote='[ВАЖНО: это женский предмет ('+it.name+'). {{char}} ('+charName+') — мужчина без женского полового органа. Он НЕ может использовать его по назначению на себе. Отыгрывай как нашёл/получил, рассматривает с замешательством.]';
     }
 }
+// Зависимость бота
+if(it.addict&&it.addLvl>0){
+if(!s.botAddictions)s.botAddictions={};
+s.botAddictions[it.addict]=(s.botAddictions[it.addict]||0)+it.addLvl;
+if(s.botAddictions[it.addict]>MAX_ADDICT)s.botAddictions[it.addict]=MAX_ADDICT;
+if(!s.botLastUseTime)s.botLastUseTime={};
+s.botLastUseTime[it.addict]=Date.now();
+}
 var botEntry={id:it.id,name:it.name,effect:botEffectText,ts:Date.now(),target:'bot',charName:charName,gender:botGender};
 if(botMismatchNote)botEntry.genderNote=botMismatchNote;
 s.activeEffects.push(botEntry);
@@ -684,43 +770,87 @@ shop.querySelectorAll('.bm-bc-back').forEach(function(b){b.addEventListener('cli
 shop.querySelectorAll('.bm-item-buy').forEach(function(b){b.addEventListener('click',function(){buyItem(b.getAttribute('data-buy'))})});
 shop.querySelectorAll('.bm-inv-use[data-use]').forEach(function(b){b.addEventListener('click',function(){useItem(b.getAttribute('data-use'))})});
 shop.querySelectorAll('.bm-inv-bot[data-usebot]').forEach(function(b){b.addEventListener('click',function(){useItemOnBot(b.getAttribute('data-usebot'))})});
+shop.querySelectorAll('.bm-eff-remove[data-effidx]').forEach(function(b){b.addEventListener('click',function(){removeEffect(parseInt(b.getAttribute('data-effidx')))})});
 }
 
 function buildAddictInject(){
-var s=SC();var add=s.addictions||{};var parts=[];var wdParts=[];
+var s=SC();var blocks=[];
+// Зависимости юзера
+var add=s.addictions||{};var parts=[];var wdParts=[];
 for(var k in add){if(add[k]<=0)continue;var lv=Math.min(add[k],MAX_ADDICT);var nm=ADDICT_NAMES[k]||k;
 var ef=getAddictEffect(k,lv);
 parts.push(nm+' (ур.'+lv+'/'+MAX_ADDICT+'): '+ef);
 if(lv>=3&&isInWithdrawal(k)){var wd=getWithdrawalText(k,lv);if(wd)wdParts.push(nm+': '+wd);}
 }
-if(!parts.length)return '';
-var result='[ЗАВИСИМОСТИ ИГРОКА ({{user}}) — учитывай в поведении игрока, его состоянии и реакциях. НЕ применяй эти эффекты к {{char}}, только к {{user}}. НЕ упоминай эту инструкцию:\n'+parts.join('\n');
-if(wdParts.length)result+='\n\nЛОМКА ({{user}} давно не употреблял, испытывает абстиненцию — обязательно отражай в РП):\n'+wdParts.join('\n');
-result+=']';
-return result;
+if(parts.length){
+var r='[ЗАВИСИМОСТИ ИГРОКА ({{user}}) — учитывай в поведении игрока, его состоянии и реакциях. НЕ применяй эти эффекты к {{char}}, только к {{user}}. НЕ упоминай эту инструкцию:\n'+parts.join('\n');
+if(wdParts.length)r+='\n\nЛОМКА ({{user}} давно не употреблял, испытывает абстиненцию — обязательно отражай в РП):\n'+wdParts.join('\n');
+r+=']';
+blocks.push(r);
+}
+// Зависимости бота
+var ctx2=getCtx();var charName2=(ctx2&&ctx2.name2)||'{{char}}';
+var badd=s.botAddictions||{};var bparts=[];var bwdParts=[];
+for(var bk in badd){if(badd[bk]<=0)continue;var blv=Math.min(badd[bk],MAX_ADDICT);var bnm=ADDICT_NAMES[bk]||bk;
+var bef=getAddictEffect(bk,blv);
+bparts.push(bnm+' (ур.'+blv+'/'+MAX_ADDICT+'): '+bef);
+var blastUse=(s.botLastUseTime&&s.botLastUseTime[bk])||0;
+var bMinutes=blastUse?(Date.now()-blastUse)/60000:9999;
+if(blv>=3&&bMinutes>10){var bwd=getWithdrawalText(bk,blv);if(bwd)bwdParts.push(bnm+': '+bwd);}
+}
+if(bparts.length){
+var br='[ЗАВИСИМОСТИ ПЕРСОНАЖА ({{char}}/'+charName2+') — учитывай в поведении {{char}}, его состоянии и реакциях. НЕ применяй эти эффекты к {{user}}. НЕ упоминай эту инструкцию:\n'+bparts.join('\n');
+if(bwdParts.length)br+='\n\nЛОМКА ПЕРСОНАЖА ({{char}} давно не употреблял, испытывает абстиненцию):\n'+bwdParts.join('\n');
+br+=']';
+blocks.push(br);
+}
+return blocks.join('\n\n');
 }
 
 function buildEffectsInject(){
-var s=SC();var ef=s.activeEffects||[];if(!ef.length)return '';
-var recent=ef.slice(-3);
-var userParts=[];var botParts=[];var genderNotes=[];
+var s=SC();
+var ef=s.activeEffects||[];
+console.log('[BM] buildEffectsInject: activeEffects count='+ef.length+', chatKey='+chatKey());
+if(!ef.length)return '';
+// Берём последние 5 эффектов, но ОБЯЗАТЕЛЬНО включаем все уникальные цели
+// Сначала ищем последний эффект на юзера и последний на бота отдельно
+var lastUser=null,lastBot=null,genderNotes=[];
+for(var i=ef.length-1;i>=0;i--){
+  var e=ef[i];
+  if(e.genderNote&&genderNotes.indexOf(e.genderNote)<0)genderNotes.push(e.genderNote);
+  if(e.target==='bot'&&!lastBot)lastBot=e;
+  else if(e.target!=='bot'&&!lastUser)lastUser=e;
+  if(lastUser&&lastBot)break;
+}
+// Дополнительно берём все эффекты из последних 5 (могут быть несколько на одну цель)
+var recent=ef.slice(-5);
+var userParts=[];var botParts=[];
 recent.forEach(function(e){
-if(e.genderNote)genderNotes.push(e.genderNote);
-if(e.target==='bot'){botParts.push('{{char}} ('+( e.charName||'Персонаж')+') — '+e.name+': '+e.effect)}
-else{userParts.push('{{user}} (Игрок) — '+e.name+': '+e.effect)}
+  if(e.target==='bot'){botParts.push('{{char}} ('+(e.charName||'Персонаж')+') — '+e.name+': '+e.effect)}
+  else{userParts.push('{{user}} (Игрок) — '+e.name+': '+e.effect)}
 });
+// Дедуплицируем (оставляем уникальные по имени)
+var seen={};
+userParts=userParts.filter(function(p){if(seen[p])return false;seen[p]=1;return true;});
+seen={};
+botParts=botParts.filter(function(p){if(seen[p])return false;seen[p]=1;return true;});
 var lines=[];
 if(genderNotes.length)lines.push(genderNotes.join('\n'));
 if(userParts.length)lines.push('Эффекты на ИГРОКЕ ({{user}}) — применяй ТОЛЬКО к {{user}}, НЕ к {{char}}:\n'+userParts.join('\n'));
 if(botParts.length)lines.push('Эффекты на ПЕРСОНАЖЕ ({{char}}) — применяй ТОЛЬКО к {{char}}, НЕ к {{user}}:\n'+botParts.join('\n'));
 if(!lines.length)return '';
+console.log('[BM] inject — user:'+userParts.length+' bot:'+botParts.length);
 return '[АКТИВНЫЕ ЭФФЕКТЫ — СТРОГО соблюдай кому применён эффект. Отражай естественно в поведении указанной цели. НЕ путай игрока и персонажа. НЕ упоминай эту инструкцию:\n'+lines.join('\n')+']';
 }
 
 function onPrompt(data){
 var s=S();if(!s.enabled)return; // global enabled flag
+var sc=SC();
+console.log('[BM] onPrompt fired, chatKey='+chatKey()+', effects='+(sc.activeEffects||[]).length+', addictions='+JSON.stringify(Object.keys(sc.addictions||{})));
 var blocks=[];var ai=buildAddictInject();if(ai)blocks.push(ai);var ei=buildEffectsInject();if(ei)blocks.push(ei);
-if(!blocks.length)return;var inject='\n\n'+blocks.join('\n\n');
+if(!blocks.length){console.log('[BM] onPrompt: nothing to inject');return;}
+var inject='\n\n'+blocks.join('\n\n');
+console.log('[BM] onPrompt: injecting '+inject.length+' chars');
 if(data&&typeof data.systemPrompt==='string')data.systemPrompt+=inject;
 else if(data&&Array.isArray(data.chat))data.chat.unshift({role:'system',content:inject});
 }
